@@ -1,4 +1,4 @@
-import gym
+import gymnasium as gym
 
 # Create CartPole environment and specify render mode
 env = gym.make("CartPole-v1", render_mode='human')
