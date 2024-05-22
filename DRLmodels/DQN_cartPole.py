@@ -142,7 +142,7 @@ if __name__ == "__main__":
 
     start_time = time.time()
     consecutive_successes = 0
-    success_threshold = 1000
+    success_threshold = 500
     consecutive_goal = 10
     evaluation_window = 100
 
