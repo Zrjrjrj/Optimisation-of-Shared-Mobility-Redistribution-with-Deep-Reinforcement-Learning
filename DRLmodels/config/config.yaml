@@ -1,0 +1,31 @@
+training:
+  batch_size: 128
+  lr: 0.001 # Learning rate
+  loss: huber
+  num_episodes: 3000
+  warmup_episode: 10 # Warm-up episodes, do not update network
+  save_freq: 1000 # Model save frequency
+
+optimizer:
+  name: adam
+  lr_min: 0.0001 # Minimum learning rate
+  lr_decay: 5000 # Learning rate decay steps
+
+rl:
+  gamma: 0.8 # Discount factor
+  max_steps_per_episode: 400
+  target_model_update_episodes: 20
+  max_queue_length: 50000 # Experience replay buffer size
+
+epsilon:
+  max_epsilon: 1 # Initial exploration rate
+  min_epsilon: 0.01 # Minimum exploration rate
+  decay_epsilon: 0.99 # Exploration rate decay
+  
+model_for_cartpole:
+  input_dim: 4 # Input dimensions
+  output_dim: 2 # Output dimensions
+  hidden_layers:
+   - 64  # Number of neurons in the first hidden layer
+   - 64  # Number of neurons in the second hidden layer
+   - 32  # Number of neurons in the third hidden layer
