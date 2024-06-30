@@ -9,8 +9,6 @@ import numpy as np
 import random
 from collections import deque
 import matplotlib.pyplot as plt
-import GymEnv.redistribution_env  # 确保路径正确
-import GymEnv.register_env  # 确保环境已注册
 
 # 超参数
 EPISODES = 1000

@@ -8,6 +8,22 @@ from gym.spaces import Discrete, Box
 import numpy as np
 import random
 
+# class ShowerEnv(Env):
+#     def __init__(self):
+#         self.action_spac = Discrete()
+#         self.observation_space = Box()
+#         self.state = 0
+#     def step(self, action):
+#         return self.state, reward, done, info
+#     def render(self):
+#         pass
+#     def reset(self):
+#         return self.state
+
+# env = ShowerEnv()
+# env.action_spac.sample()
+# env.observation_space.sample()
+
 class ShowerEnv(Env):
     def __init__(self):
         self.action_spac = Discrete(3)
