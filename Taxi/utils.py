@@ -1,4 +1,3 @@
-
 # Imports
 import random
 import numpy as np
@@ -21,8 +20,10 @@ from torch.distributions import Categorical
     - decode_positions - decodes taxi's, passenger and destinations positions from integer state
 '''
 
+# define necessary named tuples
 Transition = namedtuple("Transition", ["state", "action", "reward", "next_state", "done"])
 OptimizerSpec = namedtuple("OptimizerSpec", ["constructor", "kwargs"])
+
 SavedAction = namedtuple('SavedAction', ['log_prob', 'value'])  # For AC model
 
 
