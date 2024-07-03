@@ -31,8 +31,8 @@ else:   # one-hot
     state_dim = env.observation_space.n
 
 regularization = None           # regularization may be 'regularization'
-save_fig = False        # whether to save figure of accumulated reward
-save_model = False      # whether to save the DQN model
+save_fig = True        # whether to save figure of accumulated reward
+save_model = True      # whether to save the DQN model
 
 # Define 2-layered architecture
 architecture = {"state_dim": state_dim,
