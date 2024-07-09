@@ -31,11 +31,15 @@ class RedistributionEnv(gym.Env):
             [4, 2, 3, 1, 0]
         ])
         self.lastaction = None
-        self.reward_range = (-5, 60)
+        self.reward_range = (-10, 80)
         self.state = None
         self.timestep = None
 
-    def reset(self):
+    def reset(self, seed=None, options=None):
+        if seed is not None:
+            np.random.seed(seed)
+            random.seed(seed)
+
         self.state = {
             'truck_position': random.randint(0, self.num_docks - 1),
             'bike_states': np.random.randint(0, self.dock_max_bikes + 1, size=self.num_docks),
@@ -44,11 +48,11 @@ class RedistributionEnv(gym.Env):
         total_bikes = np.sum(self.state['bike_states'])
         self.balanced_bikes = total_bikes // self.num_docks
         self.timestep = 0
-        return self.state
+        return self.state, {}
 
     def step(self, action) -> Tuple[dict, float, bool, bool, dict]:
         assert self.action_space.contains(action), "Invalid action"
-        reward = -2
+        reward = -1  # 每个时间步的固定负奖励
         terminated = False
         truncated = False
         info = {}
@@ -57,33 +61,43 @@ class RedistributionEnv(gym.Env):
             from_station = action // self.num_docks
             to_station = action % self.num_docks
             travel_cost = self.distance_matrix[from_station][to_station]
-            reward -= travel_cost
+
+            if from_station != to_station:
+                # 检查两个车站的车辆数量是否都在平均数量的误差范围内
+                if abs(self.state['bike_states'][from_station] - self.balanced_bikes) <= 1 and abs(
+                        self.state['bike_states'][to_station] - self.balanced_bikes) <= 1:
+                    reward -= 10 + travel_cost  # 无效移动时增加惩罚
+                else:
+                    reward -= 5 + travel_cost  # 增加移动的惩罚
+
             self.state['truck_position'] = to_station
 
         elif action == self.actions["pickup"]:  # Pickup bikes
             dock_index = self.state['truck_position']
-            if self.state['bike_states'][dock_index] > self.balanced_bikes and self.state[
+            if self.state['bike_states'][dock_index] > self.balanced_bikes + 1 and self.state[
                 'bikes_on_truck'] < self.max_bikes_on_truck:
                 bikes_out = min(self.state['bike_states'][dock_index] - self.balanced_bikes,
                                 self.max_bikes_on_truck - self.state['bikes_on_truck'])
                 self.state['bike_states'][dock_index] -= bikes_out
                 self.state['bikes_on_truck'] += bikes_out
-                reward = 10 - bikes_out  # Encourage efficient redistribution
+                reward += 5  # fixed reward
+                reward += 10 - bikes_out  # Encourage efficient redistribution
             else:
-                reward = -5
+                reward -= 10
 
         elif action == self.actions["dropoff"]:  # Dropoff bikes
             dock_index = self.state['truck_position']
-            if self.state['bike_states'][dock_index] < self.balanced_bikes and self.state['bikes_on_truck'] > 0:
+            if self.state['bike_states'][dock_index] < self.balanced_bikes - 1 and self.state['bikes_on_truck'] > 0:
                 bikes_needed = self.balanced_bikes - self.state['bike_states'][dock_index]
                 bikes_out = min(bikes_needed, self.state['bikes_on_truck'])
                 self.state['bike_states'][dock_index] += bikes_out
                 self.state['bikes_on_truck'] -= bikes_out
-                reward = 10 - bikes_out  # Encourage efficient redistribution
+                reward += 5  # fixed reward
+                reward += 10 - bikes_out  # Encourage efficient redistribution
             else:
-                reward = -5
+                reward -= 10
 
-        # Balance reward for individual stations.每一步中检查所有站点状态并给予接近平衡状态的小额奖励。
+        # Balance reward for individual stations. 每一步中检查所有站点状态并给予接近平衡状态的小额奖励。
         for bikes in self.state['bike_states']:
             if abs(bikes - self.balanced_bikes) <= 1:
                 reward += 1  # Small reward for being close to balanced
@@ -91,9 +105,9 @@ class RedistributionEnv(gym.Env):
         self.timestep += 1
 
         # Check for termination
-        if np.all(np.abs(self.state['bike_states'] - self.balanced_bikes) <= 1):
+        if np.all(np.abs(self.state['bike_states'] - self.balanced_bikes) <= 1) and self.state['bikes_on_truck'] == 0:
             terminated = True
-            reward += 50  # Large reward for achieving overall balance
+            reward += 60  # Large reward for achieving overall balance
         elif self.timestep >= self.max_steps_per_episode:
             truncated = True
             info['reason'] = 'max_steps_reached'
@@ -126,11 +140,12 @@ class RedistributionEnv(gym.Env):
 # env = RedistributionEnv()
 #
 # # 重置环境，开始新的episode
-# state = env.reset()
+# state = env.reset(66)
 #
 # print("Initial State:")
 # env.render()  # 渲染初始状态
-#
+
+
 # # 尝试执行 Pickup 动作
 # print("Attempting pickup...")
 # pickup_action = env.actions['pickup']
@@ -158,4 +173,3 @@ class RedistributionEnv(gym.Env):
 #             print(f"Performed move from {from_station} to {to_station}")
 #             print(f"Reward: {reward}, Done: {terminated}")
 #             env.render()  # 渲染每个动作之后的状态
-
