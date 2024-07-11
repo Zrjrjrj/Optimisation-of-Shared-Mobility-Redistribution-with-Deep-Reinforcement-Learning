@@ -24,14 +24,14 @@ class RedistributionEnv(gym.Env):
             'bikes_on_truck': spaces.Discrete(max_bikes_on_truck + 1)
         })
         self.distance_matrix = np.array([
-            [0, 2, 5, 9, 4],
+            [0, 2, 5, 8, 4],
             [2, 0, 3, 7, 2],
             [5, 3, 0, 4, 3],
-            [9, 7, 4, 0, 1],
+            [8, 7, 4, 0, 1],
             [4, 2, 3, 1, 0]
         ])
         self.lastaction = None
-        self.reward_range = (-10, 60)
+        self.reward_range = (-10, 80)
         self.state = None
         self.timestep = None
 
@@ -63,14 +63,13 @@ class RedistributionEnv(gym.Env):
             to_station = offset + (1 if offset >= from_station else 0)
 
             travel_cost = self.distance_matrix[from_station][to_station]
-
-            # 检查两个车站的车辆数量是否都在平均数量的误差范围内
-            if abs(self.state['bike_states'][from_station] - self.balanced_bikes) <= 1 and abs(
-                    self.state['bike_states'][to_station] - self.balanced_bikes) <= 1:
-                reward -= 2 + travel_cost  # 无效移动时增加惩罚
-            else:
-                reward -= travel_cost  # 增加移动的惩罚
-
+            reward -= travel_cost
+            # # 检查两个车站的车辆数量是否都在平均数量的误差范围内
+            # if abs(self.state['bike_states'][from_station] - self.balanced_bikes) <= 1 and abs(
+            #         self.state['bike_states'][to_station] - self.balanced_bikes) <= 1:
+            #     reward -= 2 + travel_cost  # 无效移动时增加惩罚
+            # else:
+            #     reward -= travel_cost  # 增加移动的惩罚
             self.state['truck_position'] = to_station
 
         elif action == self.actions["pickup"]:  # Pickup bikes
@@ -81,7 +80,7 @@ class RedistributionEnv(gym.Env):
                                 self.max_bikes_on_truck - self.state['bikes_on_truck'])
                 self.state['bike_states'][dock_index] -= bikes_out
                 self.state['bikes_on_truck'] += bikes_out
-                reward += 3  # fixed reward
+                reward += 5  # fixed reward
                 reward += 5 - bikes_out  # Encourage efficient redistribution
             else:
                 reward -= 5
@@ -94,7 +93,7 @@ class RedistributionEnv(gym.Env):
                 bikes_out = min(bikes_needed, self.state['bikes_on_truck'])
                 self.state['bike_states'][dock_index] += bikes_out
                 self.state['bikes_on_truck'] -= bikes_out
-                reward += 3  # fixed reward
+                reward += 5  # fixed reward
                 reward += 5 - bikes_out  # Encourage efficient redistribution
             else:
                 reward -= 5
