@@ -13,13 +13,8 @@ class RedistributionEnv(gym.Env):
         self.dock_max_bikes = dock_max_bikes
         self.max_steps_per_episode = max_steps_per_episode
         self.max_bikes_on_truck = max_bikes_on_truck
-        # self.action_space = spaces.Discrete(num_docks * (num_docks - 1) + 2)
         self.action_space = spaces.Discrete(num_docks + 2)
-        # self.actions = {f"move_{i}_to_{j}": i * (num_docks - 1) + j - (1 if j > i else 0) for i in range(num_docks) for
-        #                 j in range(num_docks) if i != j}
         self.actions = {f"move_to_{i}": i for i in range(num_docks)}
-        # self.actions["pickup"] = num_docks * (num_docks - 1)
-        # self.actions["dropoff"] = num_docks * (num_docks - 1) + 1
         self.actions["pickup"] = num_docks
         self.actions["dropoff"] = num_docks + 1
         self.observation_space = spaces.Dict({
@@ -50,71 +45,53 @@ class RedistributionEnv(gym.Env):
             'bikes_on_truck': 0
         }  # state是字典格式，三个键值
         total_bikes = np.sum(self.state['bike_states'])
-        self.balanced_bikes = total_bikes // self.num_docks
+        # print(f"total_bikes is {total_bikes}")
+        self.balanced_bikes = int(total_bikes / self.num_docks)
+        # print(f"self.balanced_bikes is {self.balanced_bikes}")
         self.timestep = 0
         return self.state, {}
 
     def step(self, action) -> Tuple[dict, float, bool, bool, dict]:
         assert self.action_space.contains(action), "Invalid action"
-        reward = -5  # 每个时间步的固定负奖励
+        reward = -3  # 每个时间步的固定负奖励
         terminated = False
         truncated = False
         info = {}
-
-        # if action < self.num_docks * (self.num_docks - 1):  # Movement 鼓励移动，不再设置奖惩
-        #     from_station = action // (self.num_docks - 1)
-        #     offset = action % (self.num_docks - 1)
-        #     to_station = offset + (1 if offset >= from_station else 0)
-        #     # reward -= 10
-        #     # travel_cost = self.distance_matrix[from_station][to_station]
-        #     # reward -= travel_cost
-        #     # 检查两个车站的车辆数量是否都在平均数量的误差范围内
-        #     # if abs(self.state['bike_states'][from_station] - self.balanced_bikes) <= 1 and abs(
-        #     #         self.state['bike_states'][to_station] - self.balanced_bikes) <= 1:
-        #     #     reward -= 8   # 无效移动时增加惩罚
-        #     # else:
-        #     #     reward -= 5  # 增加移动的惩罚
-        #     self.state['truck_position'] = to_station
         if action < self.num_docks:
             to_station = action
             from_station = self.state['truck_position']
-            if from_station != to_station:
-                # travel_cost = self.distance_matrix[from_station][to_station]
-                # reward -= travel_cost
+            if from_station == to_station:
+                reward -= 30  # 给一个小惩罚，鼓励卡车移动
+            else:
+                travel_cost = self.distance_matrix[from_station][to_station]
+                reward -= travel_cost
                 self.state['truck_position'] = to_station
-                # check balance improvement
-                if abs(self.state['bike_states'][from_station] - self.balanced_bikes) > abs(
-                        self.state['bike_states'][to_station] - self.balanced_bikes):
-                    reward += 2
-                else:
-                    reward -= 2
-
 
         elif action == self.actions["pickup"]:  # Pickup bikes
             dock_index = self.state['truck_position']
             bikes_in_dock = self.state['bike_states'][dock_index]
             if bikes_in_dock > self.balanced_bikes and self.state['bikes_on_truck'] < self.max_bikes_on_truck:
-                bikes_out = min(bikes_in_dock - int(np.ceil(self.balanced_bikes)),
+                bikes_out = min(bikes_in_dock - self.balanced_bikes,
                                 self.max_bikes_on_truck - self.state['bikes_on_truck'])
                 self.state['bike_states'][dock_index] -= bikes_out
                 self.state['bikes_on_truck'] += bikes_out
                 reward += 10  # fixed reward
                 # reward += 10 - bikes_out  # Encourage efficient redistribution
             else:
-                reward -= 20
+                reward -= 15
 
         elif action == self.actions["dropoff"]:  # Dropoff bikes
             dock_index = self.state['truck_position']
             bikes_in_dock = self.state['bike_states'][dock_index]
             if bikes_in_dock < self.balanced_bikes and self.state['bikes_on_truck'] > 0:
-                bikes_needed = int(np.floor(self.balanced_bikes)) - bikes_in_dock
+                bikes_needed = self.balanced_bikes - bikes_in_dock
                 bikes_out = min(bikes_needed, self.state['bikes_on_truck'])
                 self.state['bike_states'][dock_index] += bikes_out
                 self.state['bikes_on_truck'] -= bikes_out
                 reward += 10  # fixed reward
                 # reward += 10 - bikes_out  # Encourage efficient redistribution
             else:
-                reward -= 20
+                reward -= 15
 
         # 经过测试这一步对获得最终奖励很重要。
         # Balance reward for individual stations. 每一步中检查所有站点状态并给予接近平衡状态的小额奖励。
@@ -125,7 +102,7 @@ class RedistributionEnv(gym.Env):
         self.timestep += 1
 
         # Check for termination
-        if np.all(np.abs(self.state['bike_states'] - self.balanced_bikes) <= 1) and self.state['bikes_on_truck'] == 0:
+        if np.all(np.abs(self.state['bike_states'] - self.balanced_bikes) <= 1) and self.state['bikes_on_truck'] <= 1:
             terminated = True
             reward += 500  # Large reward for achieving overall balance
         elif self.timestep >= self.max_steps_per_episode:
@@ -138,7 +115,7 @@ class RedistributionEnv(gym.Env):
         if mode != 'ansi':
             raise NotImplementedError("Render mode not supported: {}".format(mode))
 
-        output = "\n"
+        output = ""
         truck_position = self.state['truck_position']
         bike_states = self.state['bike_states']
         bikes_on_truck = self.state['bikes_on_truck']
@@ -158,35 +135,123 @@ class RedistributionEnv(gym.Env):
 # # test
 # # 创建环境实例
 # env = RedistributionEnv()
-#
-# # 重置环境，开始新的episode
 # state = env.reset(66)
-#
 # print("Initial State:")
 # env.render()  # 渲染初始状态
 # print('.......................................')
-#
-# # 尝试执行 Pickup 动作
-# print("Attempting pickup...")
-# pickup_action = env.actions['pickup']
-# state, reward, terminated, _, _ = env.step(pickup_action)  # 执行 pickup 动作
-# print(f"Reward after pickup: {reward}, Done: {terminated}")
-# env.render()  # 渲染动作后的状态
-#
-# # 执行 Movement 动作 从0到3
-# print("Attempting move_to_3...")
-# move_to_3 = env.actions['move_to_3']
-# state, reward, terminated, _, _ = env.step(move_to_3)
-# print(f"Reward after move_to_3: {reward}, Done: {terminated}")
+# total_reward1 = 0
+# action = env.actions['pickup']
+# state, reward, terminated, truncated, info = env.step(action)
+# total_reward1 += reward
+# print(f'Action: {action}, Reward: {reward}, Terminated: {terminated}')
 # env.render()
-#
-# # 尝试执行 Dropoff 动作
-# print("Attempting dropoff...")
-# dropoff_action = env.actions['dropoff']
-# state, reward, terminated, _, _ = env.step(dropoff_action)  # 执行 dropoff 动作
-# print(f"Reward after dropoff: {reward}, Done: {terminated}")
-# env.render()  # 渲染动作后的状态
-#
+# action = env.actions['move_to_1']
+# state, reward, terminated, truncated, info = env.step(action)
+# total_reward1 += reward
+# print(f'Action: {action}, Reward: {reward}, Terminated: {terminated}')
+# env.render()
+# action = env.actions['pickup']
+# state, reward, terminated, truncated, info = env.step(action)
+# total_reward1 += reward
+# print(f'Action: {action}, Reward: {reward}, Terminated: {terminated}')
+# env.render()
+# action = env.actions['move_to_2']
+# state, reward, terminated, truncated, info = env.step(action)
+# total_reward1 += reward
+# print(f'Action: {action}, Reward: {reward}, Terminated: {terminated}')
+# env.render()
+# action = env.actions['dropoff']
+# state, reward, terminated, truncated, info = env.step(action)
+# total_reward1 += reward
+# print(f'Action: {action}, Reward: {reward}, Terminated: {terminated}')
+# env.render()
+# action = env.actions['move_to_4']
+# state, reward, terminated, truncated, info = env.step(action)
+# total_reward1 += reward
+# print(f'Action: {action}, Reward: {reward}, Terminated: {terminated}')
+# env.render()
+# action = env.actions['pickup']
+# state, reward, terminated, truncated, info = env.step(action)
+# total_reward1 += reward
+# print(f'Action: {action}, Reward: {reward}, Terminated: {terminated}')
+# env.render()
+# action = env.actions['move_to_3']
+# state, reward, terminated, truncated, info = env.step(action)
+# total_reward1 += reward
+# print(f'Action: {action}, Reward: {reward}, Terminated: {terminated}')
+# env.render()
+# action = env.actions['dropoff']
+# state, reward, terminated, truncated, info = env.step(action)
+# total_reward1 += reward
+# print(f'Action: {action}, Reward: {reward}, Terminated: {terminated}')
+# env.render()
+# print(f'total_reward1: {total_reward1}')
+# print("....................................................")
+# print("....................................................")
+# # env = RedistributionEnv()
+# state = env.reset(40)
+# print("Initial State:")
+# env.render()  # 渲染初始状态
+# print('.......................................')
+# total_reward2 = 0
+# action = env.actions['pickup']
+# state, reward, terminated, truncated, info = env.step(action)
+# total_reward2 += reward
+# print(f'Action: {action}, Reward: {reward}, Terminated: {terminated}')
+# env.render()
+# action = env.actions['move_to_4']
+# state, reward, terminated, truncated, info = env.step(action)
+# total_reward2 += reward
+# print(f'Action: {action}, Reward: {reward}, Terminated: {terminated}')
+# env.render()
+# action = env.actions['dropoff']
+# state, reward, terminated, truncated, info = env.step(action)
+# total_reward2 += reward
+# print(f'Action: {action}, Reward: {reward}, Terminated: {terminated}')
+# env.render()
+# action = env.actions['move_to_3']
+# state, reward, terminated, truncated, info = env.step(action)
+# total_reward2 += reward
+# print(f'Action: {action}, Reward: {reward}, Terminated: {terminated}')
+# env.render()
+# action = env.actions['pickup']
+# state, reward, terminated, truncated, info = env.step(action)
+# total_reward2 += reward
+# print(f'Action: {action}, Reward: {reward}, Terminated: {terminated}')
+# env.render()
+# action = env.actions['move_to_2']
+# state, reward, terminated, truncated, info = env.step(action)
+# total_reward2 += reward
+# print(f'Action: {action}, Reward: {reward}, Terminated: {terminated}')
+# env.render()
+# action = env.actions['dropoff']
+# state, reward, terminated, truncated, info = env.step(action)
+# total_reward2 += reward
+# print(f'Action: {action}, Reward: {reward}, Terminated: {terminated}')
+# env.render()
+# action = env.actions['move_to_0']
+# state, reward, terminated, truncated, info = env.step(action)
+# total_reward2 += reward
+# print(f'Action: {action}, Reward: {reward}, Terminated: {terminated}')
+# env.render()
+# action = env.actions['dropoff']
+# state, reward, terminated, truncated, info = env.step(action)
+# total_reward2 += reward
+# print(f'Action: {action}, Reward: {reward}, Terminated: {terminated}')
+# env.render()
+# action = env.actions['move_to_4']
+# state, reward, terminated, truncated, info = env.step(action)
+# total_reward2 += reward
+# print(f'Action: {action}, Reward: {reward}, Terminated: {terminated}')
+# env.render()
+# action = env.actions['dropoff']
+# state, reward, terminated, truncated, info = env.step(action)
+# total_reward2 += reward
+# print(f'Action: {action}, Reward: {reward}, Terminated: {terminated}')
+# env.render()
+# print(f'total_reward2: {total_reward2}')
+
+
 # print("....................................................")
 # print("....................................................")
 # print("Attempting movement...")
