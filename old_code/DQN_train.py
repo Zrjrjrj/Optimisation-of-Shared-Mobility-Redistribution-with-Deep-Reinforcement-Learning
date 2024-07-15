@@ -10,7 +10,7 @@ from deep_q_learner import deep_Q_learning
 env = gym.make('Taxi-v3')
 
 # Define all the model parameters
-hidden_units = 32               # num. units in hidden layer
+hidden_units = 256               # num. units in hidden layer
 replay_buffer_size = 200000     # buffer size
 start_learning = 50000          # num. transitions before start learning
 target_update_freq = 10000      # num. transitions between Q_target network updates
